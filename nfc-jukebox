@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+
+volume=50
+music_dir="../nfc-jukebox-resources/songs"
+
+pause_tag="0012310413"
+shutdown_tag="0011566376"
+volume_up_tag="0012201985"
+volume_down_tag="0012228406"
+seek_ten_seconds="0012014364"
+
+next="0011574660"
+previous="0011753580"
+loop="0011895574"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+hooks_file="$script_dir""/nfc-jukebox-hooks"
+[[ -n "$1" ]] && hooks_file="$1"
+
+control_pipe="/tmp/nfc-jukebox-pipe"
+log_file="/tmp/nfc-jukebox-logfile.log"
+mplayer_scrapper="nfc-jukebox-info-scrapper"
+
+# shellcheck source=jukebox-hooks
+source "${hooks_file}"
+
+# Get absolute path of directory
+music_dir=$(readlink -f $music_dir)
+
+if [[ ! -d "$music_dir" ]]; then
+  echo "Not a valid music directory: '$music_dir'"
+  exit 1
+fi
+
+pgrep -f "$mplayer_scrapper" | xargs -r kill -9
+[[ -f "$log_file" ]] && rm "$log_file"
+./"$mplayer_scrapper" "$log_file" "$hooks_file" &
+
+kill_process() {
+  pids=$(pgrep -f "$1")
+  if [[ -n "$pids" ]]; then
+    for pid in $pids; do
+      if [[ "$pid" != "$$" ]]; then
+        echo "Stopping process: $pid"
+        disown "$pid" >/dev/null 2>&1
+        kill -9 "$pid"
+      fi
+    done
+  fi
+}
+
+teardown() {
+  echo && hook "shutdown"
+  kill_process "mplayer -slave"
+  kill_process "$mplayer_scrapper"
+}
+trap teardown EXIT
+
+# Executes user hooks
+#
+# $1    - Hook name
+# $2-$* - Hook arguments
+hook() {
+  hook_name="$1"
+  shift
+  if [[ "$(type -t "$hook_name")" == "function" ]]; then
+    eval "$hook_name $*"
+  fi
+}
+
+create_control_pipe() {
+  [[ -p "$control_pipe" ]] && rm "$control_pipe"
+  mkfifo "$control_pipe"
+}
+
+stop_playback() {
+  pids=$(pgrep -f "mplayer -slave")
+  if [[ -n "$pids" ]]; then
+    echo "quit" >"$control_pipe" &
+    sleep 0.1
+    kill_process "mplayer -slave"
+  fi
+}
+
+echo && hook "startup"
+
+start_playback() {
+  stop_playback
+  create_control_pipe
+
+  file="$1"
+  filename=$(basename -- "$file")
+  extension="${filename##*.}"
+
+  arguments=(
+    '-slave'
+    '-volume' "$volume"
+    '-msglevel' 'all=4'
+    '-input' "file=$control_pipe"
+  )
+
+  if [[ "$extension" == "txt" ]]; then
+    file="$(cat "$file")"
+  fi
+
+  if [[ "$file" == *.m3u ]]; then
+    arguments=("${arguments[@]}" "-playlist" "$file")
+  elif [[ -d "$file" ]]; then
+    arguments=("${arguments[@]}" "-loop" "2" "-shuffle" "$file/"*)
+  else
+    arguments=("${arguments[@]}" "$file")
+  fi
+
+  nohup mplayer "${arguments[@]/#/}" &>>"$log_file" &
+}
+
+get_timestamp() {
+  date +%s%N | cut -b1-13
+}
+
+set_volume() {
+  volume=$((volume + $1))
+
+  if [[ "$volume" -gt 100 ]]; then
+    volume=100
+  fi
+
+  if [[ "$volume" -lt 25 ]]; then
+    volume=25
+  fi
+
+  hook "volume_changed" "$volume"
+  echo "volume $volume 1" >"$control_pipe"
+}
+
+while true; do
+  sleep 0.5
+
+  read -rep $'Waiting for tag...\n' id
+
+  #  id=0011989424
+  #  id=0004633422
+  #  id=0004622843
+  #  id=0004622844
+  #  id=0004622845
+
+  if [[ -z $start_timestamp ]]; then
+    start_timestamp=$(get_timestamp)
+  else
+    end_timestamp=$(get_timestamp)
+    duration=$((end_timestamp - start_timestamp))
+    if [[ "$duration" -lt 500 ]]; then
+      echo "Temporary locked"
+      continue
+    fi
+    start_timestamp=$(get_timestamp)
+  fi
+
+  entry=$(find "$music_dir" -name "$id - *")
+  echo "$entry"
+
+  if [[ -f "$entry" ]] || [[ -d "$entry" ]]; then
+    hook "playing_file" "${entry@Q}"
+    start_playback "$entry"
+    continue
+  fi
+
+  if [[ "$id" == "$pause_tag" ]]; then
+    hook "pause"
+    echo "pause" >"$control_pipe"
+    continue
+  fi
+
+  if [[ "$id" == "$seek_ten_seconds" ]]; then
+    echo "seek_ten_seconds 10 0" >"$control_pipe"
+    continue
+  fi
+
+  if [[ "$id" == "$volume_up_tag" ]]; then
+    set_volume 10
+    continue
+  fi
+
+  if [[ "$id" == "$volume_down_tag" ]]; then
+    set_volume -10
+    continue
+  fi
+
+  if [[ "$id" == "$next" ]]; then
+    echo "pt_step 1" >"$control_pipe"
+    continue
+  fi
+
+  if [[ "$id" == "$previous" ]]; then
+    echo "pt_step -1" >"$control_pipe"
+    continue
+  fi
+
+  if [[ "$id" == "$loop" ]]; then
+    echo "loop 2" >"$control_pipe"
+    continue
+  fi
+
+  if [[ "$id" == "$shutdown_tag" ]]; then
+    break
+  fi
+
+done
