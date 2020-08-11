@@ -15,8 +15,6 @@ seek_backward="0011908459"
 next="0011574660"
 previous="0011753580"
 
-loop="0011926110"
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 hooks_file="$script_dir""/nfc-jukebox-hooks"
 [[ -n "$1" ]] && hooks_file="$1"
@@ -98,10 +96,12 @@ start_playback() {
   extension="${filename##*.}"
 
   arguments=(
-    '-slave'
-    '-volume' "$volume"
-    '-msglevel' 'all=4'
-    '-input' "file=$control_pipe"
+    "-slave"
+    "-shuffle"
+    "-volume" "$volume"
+    "-msglevel" "all=4"
+    "-loop" "0"
+    "-input" "file=$control_pipe"
   )
 
   if [[ "$extension" == "txt" ]]; then
@@ -112,7 +112,7 @@ start_playback() {
   if [[ "$file" == *.m3u ]]; then
     arguments=("${arguments[@]}" "-playlist" "$file")
   elif [[ -d "$file" ]]; then
-    arguments=("${arguments[@]}" "-loop" "0" "-shuffle" "$file/"*)
+    arguments=("${arguments[@]}" "$file/"*)
   else
     arguments=("${arguments[@]}" "$file")
   fi
@@ -198,11 +198,6 @@ while true; do
 
   if [[ "$id" == "$previous" ]]; then
     echo "pt_step -1" >"$control_pipe" &
-    continue
-  fi
-
-  if [[ "$id" == "$loop" ]]; then
-    echo "loop 0" >"$control_pipe" &
     continue
   fi
 
