@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-volume=80
+volume=50
 music_dir="../nfc-jukebox-resources/songs"
 
 pause_tag="0012310413"
