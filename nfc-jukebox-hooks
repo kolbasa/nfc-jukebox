@@ -4,31 +4,22 @@ startup() {
   echo "Started"
 }
 
+shutdown() {
+  echo "Shutting down"
+}
+
 pause() {
   echo "Pause"
 }
 
-shutdown() {
-  echo "Shutting down"
+# $1 - Tag ID
+on_tag() {
+  echo "Scanned: '$1'"
 }
 
 # $1 - File path
 playing_file() {
   echo "Playing file: '$1'"
-}
-
-# $1 - Artist
-# $2 - Title
-# $3 - Year
-# $4 - Duration
-playing_song() {
-  echo "Playing song: '$1 - $2 ($3)'"
-}
-
-# $1 - Name
-# $2 - Info
-playing_stream() {
-  echo "Playing stream: '$1 - $2'"
 }
 
 # $1 - Volume
