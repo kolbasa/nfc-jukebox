@@ -2,12 +2,13 @@
 
 startup() {
   echo "Started"
-  nohup mplayer -slave -volume 60 ../nfc-jukebox-resources/startup.m4a >/dev/null 2>&1 &
+  nohup mplayer -slave -volume 40 ../nfc-jukebox-resources/startup.m4a >/dev/null 2>&1 &
 }
 
 shutdown() {
   echo "Shutting down"
-  nohup mplayer -slave -volume 60 ../nfc-jukebox-resources/shutdown.m4a >/dev/null 2>&1 &
+  nohup mplayer -slave -volume 50 ../nfc-jukebox-resources/shutdown.m4a >/dev/null 2>&1
+  sudo halt
 }
 
 pause() {
