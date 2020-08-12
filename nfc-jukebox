@@ -172,12 +172,12 @@ while true; do
   fi
 
   if [[ "$id" == "$seek_forward" ]]; then
-    echo "seek_forward 15 0" >"$control_pipe" &
+    echo "seek +15 0" >"$control_pipe" &
     continue
   fi
 
   if [[ "$id" == "$seek_backward" ]]; then
-    echo "seek_backward 15 0" >"$control_pipe" &
+    echo "seek -15 0" >"$control_pipe" &
     continue
   fi
 
