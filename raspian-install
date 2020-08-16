@@ -18,5 +18,5 @@ fi
 cat >"$autostart_file" <<EOF
 @lxpanel --profile LXDE-pi
 @pcmanfm --desktop --profile LXDE-pi
-@lxterminal --working-directory="/home/pi/JukeBox/" -e "./nfc-jukebox"
+@lxterminal --working-directory=/home/pi/JukeBox -e "./nfc-jukebox"
 EOF
