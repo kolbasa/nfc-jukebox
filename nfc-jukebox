@@ -1,54 +1,26 @@
 #!/usr/bin/env bash
 
-volume=50
-music_dir="../nfc-jukebox-resources/songs"
-
-pause_tag="0012310413"
-shutdown_tag="0011566376"
-
-volume_up_tag="0012228406"
-volume_down_tag="0012201985"
-
-seek_forward="0012014364"
-seek_backward="0011908459"
-
-next="0011574660"
-previous="0011753580"
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-hooks_file="$script_dir""/nfc-jukebox-hooks"
-[[ -n "$1" ]] && hooks_file="$1"
 
+mplayer_process="mplayer -slave"
 control_pipe="/tmp/nfc-jukebox-pipe"
 log_file="/tmp/nfc-jukebox-logfile.log"
-mplayer_process="mplayer -slave"
 
-# shellcheck source=jukebox-hooks
-source "${hooks_file}"
+# shellcheck source=nfc-jukebox-config
+source "$script_dir""/nfc-jukebox-config"
+
+volume=50
+# shellcheck disable=SC2154
+if [[ -n "$start_volume" ]]; then
+  volume="$start_volume"
+fi
 
 # Get absolute path of directory
-music_dir=$(readlink -f $music_dir)
-
+music_dir=$(readlink -f "$music_dir")
 if [[ ! -d "$music_dir" ]]; then
   echo "Not a valid music directory: '$music_dir'"
   exit 1
 fi
-
-# Is used to kill mplayer
-#
-# $1 - Process name
-kill_process() {
-  pids=$(pgrep -f "$1")
-  if [[ -n "$pids" ]]; then
-    for pid in $pids; do
-      if [[ "$pid" != "$$" ]]; then
-        echo "Stopping process: $pid"
-        disown "$pid" >/dev/null 2>&1
-        kill -9 "$pid"
-      fi
-    done
-  fi
-}
 
 # Cleanup
 teardown() {
@@ -71,21 +43,37 @@ hook() {
   fi
 }
 
+# This file is used to control mplayer.
 create_control_pipe() {
   [[ -p "$control_pipe" ]] && rm "$control_pipe"
   mkfifo "$control_pipe"
 }
 
+# Is used to kill mplayer
+#
+# $1 - Process name
+kill_process() {
+  pids=$(pgrep -f "$1")
+  if [[ -n "$pids" ]]; then
+    for pid in $pids; do
+      if [[ "$pid" != "$$" ]]; then
+        echo "Stopping process: $pid"
+        disown "$pid" >/dev/null 2>&1
+        kill -9 "$pid"
+      fi
+    done
+  fi
+}
+
+# The playback is stopped by quitting mplayer.
 stop_playback() {
-  pids=$(pgrep -f "mplayer -slave")
+  pids=$(pgrep -f "$mplayer_process")
   if [[ -n "$pids" ]]; then
     echo "quit" >"$control_pipe" &
     sleep 0.1
     kill_process "$mplayer_process"
   fi
 }
-
-echo && hook "startup"
 
 start_playback() {
   stop_playback
@@ -120,10 +108,7 @@ start_playback() {
   nohup mplayer "${arguments[@]/#/}" &>>"$log_file" &
 }
 
-get_timestamp() {
-  date +%s%N | cut -b1-13
-}
-
+# We have to remember the volume ourselves.
 set_volume() {
   volume=$((volume + $1))
 
@@ -139,25 +124,39 @@ set_volume() {
   echo "volume $volume 1" >"$control_pipe" &
 }
 
-while true; do
-  read -rep $'Waiting for tag...\n' id
+# Returns a unix timestamp
+get_timestamp() {
+  date +%s%N | cut -b1-13
+}
 
+echo && hook "startup"
+
+# Here the actual logic begins.
+# The script waits for the input from the NFC scanner.
+while true; do
+  read -rep $'Waiting for tag...\n' tag_id
+
+  if [[ -z "$tag_id" ]]; then
+    continue
+  fi
+
+  # We want to avoid redundant scans.
+  # Accordingly, a short timeout is inserted here.
   if [[ -z $start_timestamp ]]; then
     start_timestamp=$(get_timestamp)
   else
     end_timestamp=$(get_timestamp)
-    duration=$((end_timestamp - start_timestamp))
-    if [[ "$duration" -lt 500 ]]; then
+    if [[ "$((end_timestamp - start_timestamp))" -lt 500 ]]; then
       echo "Temporary locked"
       continue
     fi
     start_timestamp=$(get_timestamp)
   fi
 
-  hook "on_tag" "$id"
+  hook "on_tag" "$tag_id"
 
-  # Searching for the file that starts with given id
-  entry=$(find "$music_dir" -name "$id - *")
+  # Searching for the file that starts with given tag_id
+  entry=$(find "$music_dir" -name "$tag_id - *")
 
   if [[ -f "$entry" ]] || [[ -d "$entry" ]]; then
     hook "playing_file" "$(printf '%q\n' "$entry")"
@@ -165,43 +164,51 @@ while true; do
     continue
   fi
 
-  if [[ "$id" == "$pause_tag" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$pause_tag" ]] && [[ "$tag_id" == "$pause_tag" ]]; then
     hook "pause"
     echo "pause" >"$control_pipe" &
     continue
   fi
 
-  if [[ "$id" == "$seek_forward" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$seek_forward_tag" ]] && [[ "$tag_id" == "$seek_forward_tag" ]]; then
     echo "seek +15 0" >"$control_pipe" &
     continue
   fi
 
-  if [[ "$id" == "$seek_backward" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$seek_backward_tag" ]] && [[ "$tag_id" == "$seek_backward_tag" ]]; then
     echo "seek -15 0" >"$control_pipe" &
     continue
   fi
 
-  if [[ "$id" == "$volume_up_tag" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$volume_up_tag" ]] && [[ "$tag_id" == "$volume_up_tag" ]]; then
     set_volume 10
     continue
   fi
 
-  if [[ "$id" == "$volume_down_tag" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$volume_down_tag" ]] && [[ "$tag_id" == "$volume_down_tag" ]]; then
     set_volume -10
     continue
   fi
 
-  if [[ "$id" == "$next" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$next_tag" ]] && [[ "$tag_id" == "$next_tag" ]]; then
     echo "pt_step 1" >"$control_pipe" &
     continue
   fi
 
-  if [[ "$id" == "$previous" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$previous_tag" ]] && [[ "$tag_id" == "$previous_tag" ]]; then
     echo "pt_step -1" >"$control_pipe" &
     continue
   fi
 
-  if [[ "$id" == "$shutdown_tag" ]]; then
+  # shellcheck disable=SC2154
+  if [[ -n "$shutdown_tag" ]] && [[ "$tag_id" == "$shutdown_tag" ]]; then
     echo "pause" >"$control_pipe" &
     break
   fi
