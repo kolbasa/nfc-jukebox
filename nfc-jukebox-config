@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
-music_dir="music"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+music_dir="$script_dir/music"
 start_volume="50"
 
 pause_tag=""
