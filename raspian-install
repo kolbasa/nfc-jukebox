@@ -11,7 +11,6 @@ if [[ ! -d "$autostart_dir" ]]; then
 fi
 
 autostart_file="$autostart_dir/autostart"
-
 if [[ -f "$autostart_file" ]]; then
   rm "$autostart_file"
 fi
@@ -19,5 +18,5 @@ fi
 cat >"$autostart_file" <<EOF
 @lxpanel --profile LXDE-pi
 @pcmanfm --desktop --profile LXDE-pi
-@lxterminal -e "/home/pi/JukeBox/nfc-jukebox"
+@lxterminal --working-directory="/home/pi/JukeBox/" -e "./nfc-jukebox"
 EOF

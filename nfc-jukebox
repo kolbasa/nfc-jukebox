@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 mplayer_process="mplayer -slave"
 control_pipe="/tmp/nfc-jukebox-pipe"
 log_file="/tmp/nfc-jukebox-logfile.log"
 
-# shellcheck source=nfc-jukebox-config
-source "$script_dir""/nfc-jukebox-config"
+source "nfc-jukebox-config"
 
 volume=50
 # shellcheck disable=SC2154
