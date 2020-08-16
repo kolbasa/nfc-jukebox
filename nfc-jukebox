@@ -49,7 +49,7 @@ create_control_pipe() {
   mkfifo "$control_pipe"
 }
 
-# Is used to kill mplayer
+# Kills a process by its name.
 #
 # $1 - Process name
 kill_process() {
@@ -65,7 +65,7 @@ kill_process() {
   fi
 }
 
-# The playback is stopped by quitting mplayer.
+# The playback is stopped by killing mplayer.
 stop_playback() {
   pids=$(pgrep -f "$mplayer_process")
   if [[ -n "$pids" ]]; then
