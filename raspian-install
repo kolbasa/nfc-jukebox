@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-git clone https://github.com/kolbasa/nfc-jukebox --depth 1 "/home/pi/JukeBox"
+jukebox_dir="/home/pi/JukeBox"
+if [[ ! -d "$jukebox_dir" ]]; then
+  git clone https://github.com/kolbasa/nfc-jukebox --depth 1 "$jukebox_dir"
+fi
 
 autostart_dir="/home/pi/.config/lxsession/LXDE-pi/"
 if [[ ! -d "$autostart_dir" ]]; then
@@ -10,9 +13,11 @@ fi
 autostart_file="$autostart_dir/autostart"
 
 if [[ -f "$autostart_file" ]]; then
-cat > "$autostart_file" << EOF
+  rm "$autostart_file"
+fi
+
+cat >"$autostart_file" <<EOF
 @lxpanel --profile LXDE-pi
 @pcmanfm --desktop --profile LXDE-pi
-@lxterminal -e "/home/pi/JukeBox/nfc-jukebox/nfc-jukebox/nfc-jukebox"
+@lxterminal -e "/home/pi/JukeBox/nfc-jukebox"
 EOF
-fi
